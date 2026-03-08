@@ -12,9 +12,13 @@ import {
   X,
   Search,
   ChevronRight,
-  TrendingUp,
   Camera,
-  DollarSign
+  DollarSign,
+  Mail,
+  Lock,
+  User,
+  Briefcase,
+  ArrowRight
 } from 'lucide-react';
 
 // --- Types ---
@@ -35,7 +39,191 @@ const NAVIGATION: NavItem[] = [
   { name: 'Settings', icon: Settings },
 ];
 
-// --- Components ---
+// --- Auth Component ---
+
+const AuthPage = ({ onLogin }: { onLogin: () => void }) => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [formData, setFormData] = useState({
+    fullName: '',
+    agencyName: '',
+    email: '',
+    password: ''
+  });
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Simulate authentication
+    onLogin();
+  };
+
+  return (
+    <div className="flex min-h-screen w-full bg-white font-sans">
+      {/* Left Side - Image (Hidden on mobile) */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-black overflow-hidden">
+        <div className="absolute inset-0 bg-black/40 z-10" />
+        <img 
+          src="https://picsum.photos/seed/wedding-cinematography/1920/1080?grayscale" 
+          alt="Wedding Cinematography" 
+          className="absolute inset-0 w-full h-full object-cover opacity-80 mix-blend-overlay"
+          referrerPolicy="no-referrer"
+        />
+        <div className="relative z-20 flex flex-col justify-between p-12 h-full text-white">
+          <div className="flex items-center gap-2 font-bold text-2xl tracking-tight">
+            <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center">
+              <Camera className="w-6 h-6 text-white" />
+            </div>
+            <span>Lens<span className="text-red-500">CRM</span></span>
+          </div>
+          
+          <div className="max-w-md">
+            <h2 className="text-4xl font-bold mb-6 leading-tight">
+              Capture moments. <br/>
+              <span className="text-red-500">We'll handle the business.</span>
+            </h2>
+            <p className="text-gray-300 text-lg">
+              The all-in-one platform designed exclusively for premium wedding photographers and cinematographers.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Side - Form */}
+      <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 lg:px-24 py-12 relative">
+        {/* Mobile Logo */}
+        <div className="flex lg:hidden items-center gap-2 font-bold text-2xl tracking-tight mb-12">
+          <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center">
+            <Camera className="w-6 h-6 text-white" />
+          </div>
+          <span>Lens<span className="text-red-500">CRM</span></span>
+        </div>
+
+        <div className="max-w-md w-full mx-auto">
+          <div className="mb-10">
+            <h1 className="text-3xl font-bold text-black mb-2">
+              {isLogin ? 'Welcome back' : 'Create your account'}
+            </h1>
+            <p className="text-gray-500">
+              {isLogin 
+                ? 'Enter your details to access your studio dashboard.' 
+                : 'Start managing your wedding business like a pro.'}
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {!isLogin && (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700">Full Name</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <User className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      name="fullName"
+                      value={formData.fullName}
+                      onChange={handleInputChange}
+                      className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400"
+                      placeholder="John Doe"
+                      required={!isLogin}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700">Photography Agency Name</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Briefcase className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      name="agencyName"
+                      value={formData.agencyName}
+                      onChange={handleInputChange}
+                      className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400"
+                      placeholder="Lumiere Studios"
+                      required={!isLogin}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Email Address</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Mail className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400"
+                  placeholder="you@studio.com"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">Password</label>
+                {isLogin && (
+                  <a href="#" className="text-sm font-medium text-red-600 hover:text-red-700">
+                    Forgot Password?
+                  </a>
+                )}
+              </div>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-600 transition-colors mt-6"
+            >
+              {isLogin ? 'Sign In' : 'Create Account'}
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </form>
+
+          <div className="mt-8 text-center">
+            <p className="text-sm text-gray-600">
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              <button
+                onClick={() => setIsLogin(!isLogin)}
+                className="font-medium text-red-600 hover:text-red-700 transition-colors"
+              >
+                {isLogin ? 'Create one now' : 'Sign in instead'}
+              </button>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Dashboard Components ---
 
 const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean; toggleSidebar: () => void }) => {
   return (
@@ -102,7 +290,7 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean; toggleSidebar: ()
   );
 };
 
-const Topbar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
+const Topbar = ({ toggleSidebar, onLogout }: { toggleSidebar: () => void, onLogout: () => void }) => {
   return (
     <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-30">
       <div className="flex items-center gap-4">
@@ -132,7 +320,7 @@ const Topbar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
         
         <div className="h-8 w-px bg-gray-200 hidden sm:block"></div>
         
-        <button className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+        <button onClick={onLogout} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div className="hidden sm:block text-right">
             <p className="text-sm font-semibold text-gray-900 leading-none">Alex Studio</p>
             <p className="text-xs text-gray-500 mt-1">Pro Plan</p>
@@ -258,16 +446,23 @@ const DashboardContent = () => {
 };
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+  const handleLogin = () => setIsAuthenticated(true);
+  const handleLogout = () => setIsAuthenticated(false);
+
+  if (!isAuthenticated) {
+    return <AuthPage onLogin={handleLogin} />;
+  }
 
   return (
     <div className="flex h-screen w-full bg-[#FAFAFA] font-sans overflow-hidden">
       <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
       
       <div className="flex flex-col flex-1 min-w-0">
-        <Topbar toggleSidebar={toggleSidebar} />
+        <Topbar toggleSidebar={toggleSidebar} onLogout={handleLogout} />
         <DashboardContent />
       </div>
     </div>
