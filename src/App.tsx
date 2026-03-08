@@ -1185,9 +1185,17 @@ const MagicGalleryContent = () => {
     }
   };
 
-  const handleCopyIds = (clientName: string) => {
-    // Dummy copy action
-    alert(`Copied selected photo IDs for ${clientName}`);
+  const handleCopyLink = (galleryId: string) => {
+    const url = `${window.location.origin}/gallery/${galleryId}`;
+    navigator.clipboard.writeText(url);
+    alert('Client Link copied to clipboard!');
+  };
+
+  const handleCopyIds = (gallery: any) => {
+    if (gallery.status !== 'Selected' || !gallery.selectedImageIds) return;
+    const idsString = gallery.selectedImageIds.join(', ');
+    navigator.clipboard.writeText(idsString);
+    alert(`Copied ${gallery.selectedImageIds.length} selected photo IDs for ${gallery.clientName}`);
   };
 
   return (
@@ -1281,6 +1289,7 @@ const MagicGalleryContent = () => {
                     <th className="px-6 py-4 font-semibold">Client Name</th>
                     <th className="px-6 py-4 font-semibold">Date Created</th>
                     <th className="px-6 py-4 font-semibold">Status</th>
+                    <th className="px-6 py-4 font-semibold">Client Link</th>
                     <th className="px-6 py-4 font-semibold text-right">Actions</th>
                   </tr>
                 </thead>
@@ -1304,12 +1313,22 @@ const MagicGalleryContent = () => {
                           {gallery.status === 'Selected' ? `Selected (${gallery.selectedCount}/${gallery.totalCount})` : gallery.status}
                         </span>
                       </td>
+                      <td className="px-6 py-4">
+                        <button 
+                          onClick={() => handleCopyLink(gallery.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black"
+                          title="Copy Client Link"
+                        >
+                          <Link className="w-4 h-4" />
+                          <span className="hidden sm:inline">Copy Link</span>
+                        </button>
+                      </td>
                       <td className="px-6 py-4 text-right">
                         <button 
-                          onClick={() => handleCopyIds(gallery.clientName)}
-                          disabled={gallery.status === 'Pending Selection'}
+                          onClick={() => handleCopyIds(gallery)}
+                          disabled={gallery.status !== 'Selected'}
                           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                            gallery.status === 'Pending Selection'
+                            gallery.status !== 'Selected'
                               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                               : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
                           }`}
@@ -1327,6 +1346,166 @@ const MagicGalleryContent = () => {
           </div>
         </div>
 
+      </div>
+    </main>
+  );
+};
+
+const CalendarContent = () => {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchBookings = async () => {
+    if (!auth.currentUser) return;
+    setLoading(true);
+    try {
+      const q = query(
+        collection(db, 'bookings'),
+        where('userId', '==', auth.currentUser.uid)
+      );
+      const querySnapshot = await getDocs(q);
+      const bookingsData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setBookings(bookingsData);
+    } catch (error) {
+      console.error("Error fetching bookings: ", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBookings();
+  }, []);
+
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  
+  const daysInMonth = getDaysInMonth(year, month);
+  const firstDay = getFirstDayOfMonth(year, month);
+
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+
+  const days = [];
+  for (let i = 0; i < firstDay; i++) {
+    days.push(null);
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    days.push(new Date(year, month, i));
+  }
+
+  const getBookingsForDate = (date: Date) => {
+    return bookings.filter(b => {
+      if (!b.eventDate) return false;
+      const bDate = new Date(b.eventDate);
+      return bDate.getFullYear() === date.getFullYear() &&
+             bDate.getMonth() === date.getMonth() &&
+             bDate.getDate() === date.getDate();
+    });
+  };
+
+  const selectedDateBookings = selectedDate ? getBookingsForDate(selectedDate) : [];
+
+  return (
+    <main className="flex-1 overflow-y-auto bg-[#F9FAFB] p-4 sm:p-6 lg:p-8">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
+          <p className="text-gray-500 mt-1">View your upcoming bookings and events.</p>
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Calendar Grid */}
+          <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-gray-900">
+                {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+              </h2>
+              <div className="flex gap-2">
+                <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                  <ChevronRight className="w-5 h-5 rotate-180 text-gray-600" />
+                </button>
+                <button onClick={nextMonth} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                  <ChevronRight className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-2 mb-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                <div key={day} className="text-center text-xs font-semibold text-gray-500 uppercase tracking-wider py-2">
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-2">
+              {days.map((date, i) => {
+                if (!date) return <div key={`empty-${i}`} className="aspect-square" />;
+                
+                const dayBookings = getBookingsForDate(date);
+                const hasBooking = dayBookings.length > 0;
+                const isSelected = selectedDate && date.getTime() === selectedDate.getTime();
+                const isToday = new Date().toDateString() === date.toDateString();
+
+                return (
+                  <button
+                    key={date.toISOString()}
+                    onClick={() => setSelectedDate(date)}
+                    className={`aspect-square flex flex-col items-center justify-center rounded-xl relative transition-all ${
+                      isSelected ? 'bg-black text-white shadow-md' : 
+                      isToday ? 'bg-red-50 text-red-600 font-bold' : 
+                      'hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <span className="text-sm">{date.getDate()}</span>
+                    {hasBooking && (
+                      <div className={`w-1.5 h-1.5 rounded-full absolute bottom-2 ${isSelected ? 'bg-red-500' : 'bg-red-600'}`} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Sidebar / Popup */}
+          <div className="w-full lg:w-80 shrink-0">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 sticky top-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">
+                {selectedDate ? selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'Select a date'}
+              </h3>
+              
+              {!selectedDate ? (
+                <p className="text-gray-500 text-sm">Click on a date in the calendar to view bookings.</p>
+              ) : selectedDateBookings.length === 0 ? (
+                <p className="text-gray-500 text-sm">No bookings on this date.</p>
+              ) : (
+                <div className="space-y-4">
+                  {selectedDateBookings.map(booking => (
+                    <div key={booking.id} className="p-4 rounded-xl border border-gray-100 bg-gray-50">
+                      <div className="font-bold text-gray-900">{booking.fullName}</div>
+                      <div className="text-sm text-red-600 font-medium mt-1">{booking.eventType}</div>
+                      {booking.venue && (
+                        <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-2">
+                          <MapPin className="w-3.5 h-3.5" />
+                          {booking.venue}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   );
@@ -1373,10 +1552,11 @@ function MainDashboard() {
       <div className="flex flex-col flex-1 min-w-0">
         <Topbar toggleSidebar={toggleSidebar} onLogout={handleLogout} />
         {activeTab === 'Dashboard' && <DashboardContent />}
+        {activeTab === 'Calendar' && <CalendarContent />}
         {activeTab === 'Bookings' && <BookingsContent />}
         {activeTab === 'Magic Gallery' && <MagicGalleryContent />}
         {activeTab === 'Settings' && <SettingsContent />}
-        {activeTab !== 'Dashboard' && activeTab !== 'Bookings' && activeTab !== 'Settings' && activeTab !== 'Magic Gallery' && (
+        {activeTab !== 'Dashboard' && activeTab !== 'Calendar' && activeTab !== 'Bookings' && activeTab !== 'Settings' && activeTab !== 'Magic Gallery' && (
           <main className="flex-1 overflow-y-auto bg-[#FAFAFA] p-4 sm:p-6 lg:p-8 flex items-center justify-center">
             <div className="text-gray-400 flex flex-col items-center">
               <p className="text-xl font-medium">{activeTab} Content</p>
