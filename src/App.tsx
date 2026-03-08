@@ -1449,11 +1449,10 @@ const PublicGallery = () => {
       await updateDoc(docRef, {
         status: 'Selected',
         selectedCount: selectedIds.size,
-        selectedIds: Array.from(selectedIds)
+        selectedImageIds: Array.from(selectedIds)
       });
       
       setGallery({ ...gallery, status: 'Selected', selectedCount: selectedIds.size });
-      alert('Selection submitted successfully! Thank you.');
     } catch (err) {
       console.error("Error submitting selection:", err);
       alert('Failed to submit selection. Please try again.');
@@ -1485,8 +1484,8 @@ const PublicGallery = () => {
     <div className="min-h-screen bg-[#FAFAFA] pb-24">
       {/* Premium Header */}
       <header className="bg-black text-white py-8 px-4 sm:px-6 lg:px-8 text-center sticky top-0 z-10 shadow-md">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{gallery.clientName}</h1>
-        <p className="text-gray-400 mt-2 text-sm sm:text-base">Please select your favorite photos for the final album.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Welcome, {gallery.clientName}!</h1>
+        <p className="text-gray-400 mt-2 text-sm sm:text-base">Please select your favorites.</p>
         {gallery.status === 'Selected' && (
           <div className="mt-4 inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-400 px-4 py-1.5 rounded-full text-sm font-medium border border-emerald-500/30">
             <CheckCircle className="w-4 h-4" />
@@ -1497,6 +1496,13 @@ const PublicGallery = () => {
 
       {/* Photo Grid */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {gallery.status === 'Selected' && (
+          <div className="mb-8 p-8 bg-emerald-50 border border-emerald-200 rounded-2xl text-center shadow-sm">
+            <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Thank You!</h2>
+            <p className="text-gray-600">Your selection of {gallery.selectedCount || selectedIds.size} photos has been successfully submitted.</p>
+          </div>
+        )}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-6">
           {dummyPhotos.map((photo) => {
             const isSelected = selectedIds.has(photo.id);
