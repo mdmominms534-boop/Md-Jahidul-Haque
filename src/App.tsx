@@ -25,14 +25,19 @@ import {
   Save,
   Phone,
   MapPin,
-  Map,
+  Map as MapIcon,
   Tag,
   Package,
   CheckCircle,
   Clock,
   Copy,
   Link,
-  Folder
+  Folder,
+  CreditCard,
+  Printer,
+  LogOut,
+  Filter,
+  Pencil
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -52,7 +57,10 @@ import {
   serverTimestamp,
   doc,
   getDoc,
-  updateDoc
+  updateDoc,
+  deleteDoc,
+  orderBy,
+  limit
 } from 'firebase/firestore';
 
 // --- Firebase Setup ---
@@ -71,6 +79,28 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // --- Types ---
+interface BrandSettings {
+  brandColor: string;
+  logoUrl: string;
+  agencyName: string;
+}
+
+const defaultBrandSettings: BrandSettings = {
+  brandColor: '#dc2626', // default red-600
+  logoUrl: '',
+  agencyName: 'LensCRM'
+};
+
+interface BrandContextType {
+  settings: BrandSettings;
+  setSettings: React.Dispatch<React.SetStateAction<BrandSettings>>;
+}
+
+export const BrandContext = React.createContext<BrandContextType>({
+  settings: defaultBrandSettings,
+  setSettings: () => {}
+});
+
 type NavItem = {
   name: string;
   icon: React.ElementType;
@@ -80,6 +110,7 @@ type NavItem = {
 const NAVIGATION: NavItem[] = [
   { name: 'Dashboard', icon: LayoutDashboard },
   { name: 'Calendar', icon: Calendar },
+  { name: 'Leads', icon: Filter },
   { name: 'Bookings', icon: BookOpen },
   { name: 'Clients', icon: Users },
   { name: 'Invoices', icon: FileText },
@@ -307,6 +338,8 @@ const Sidebar = ({
   activeTab: string;
   setActiveTab: (tab: string) => void;
 }) => {
+  const { settings } = React.useContext(BrandContext);
+
   return (
     <>
       {/* Mobile Overlay */}
@@ -327,10 +360,16 @@ const Sidebar = ({
           {/* Logo Area */}
           <div className="flex h-16 items-center justify-between px-6 border-b border-white/10">
             <div className="flex items-center gap-2 font-bold text-xl tracking-tight">
-              <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
-                <Camera className="w-5 h-5 text-white" />
-              </div>
-              <span>Lens<span className="text-red-500">CRM</span></span>
+              {settings.logoUrl ? (
+                <img src={settings.logoUrl} alt={settings.agencyName} className="h-8 max-w-[150px] object-contain" />
+              ) : (
+                <>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: settings.brandColor }}>
+                    <Camera className="w-5 h-5 text-white" />
+                  </div>
+                  <span>{settings.agencyName === 'LensCRM' ? <>Lens<span style={{ color: settings.brandColor }}>CRM</span></> : settings.agencyName}</span>
+                </>
+              )}
             </div>
             <button onClick={toggleSidebar} className="lg:hidden text-gray-400 hover:text-white">
               <X className="w-6 h-6" />
@@ -350,9 +389,10 @@ const Sidebar = ({
                   }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${
                     isActive 
-                      ? 'bg-red-600 text-white font-medium' 
+                      ? 'text-white font-medium' 
                       : 'text-gray-400 hover:bg-white/10 hover:text-white'
                   }`}
+                  style={isActive ? { backgroundColor: settings.brandColor } : {}}
                 >
                   <item.icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400 group-hover:text-white'}`} />
                   {item.name}
@@ -366,7 +406,7 @@ const Sidebar = ({
             <div className="bg-white/5 rounded-xl p-4 border border-white/10">
               <p className="text-xs text-gray-400 mb-2">Storage Used</p>
               <div className="w-full bg-black rounded-full h-1.5 mb-1">
-                <div className="bg-red-600 h-1.5 rounded-full" style={{ width: '65%' }}></div>
+                <div className="h-1.5 rounded-full" style={{ width: '65%', backgroundColor: settings.brandColor }}></div>
               </div>
               <p className="text-xs text-gray-300 font-medium text-right">65% / 1TB</p>
             </div>
@@ -378,6 +418,8 @@ const Sidebar = ({
 };
 
 const Topbar = ({ toggleSidebar, onLogout }: { toggleSidebar: () => void, onLogout: () => void }) => {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
   return (
     <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-30">
       <div className="flex items-center gap-4">
@@ -407,18 +449,34 @@ const Topbar = ({ toggleSidebar, onLogout }: { toggleSidebar: () => void, onLogo
         
         <div className="h-8 w-px bg-gray-200 hidden sm:block"></div>
         
-        <button onClick={onLogout} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-          <div className="hidden sm:block text-right">
-            <p className="text-sm font-semibold text-gray-900 leading-none">Alex Studio</p>
-            <p className="text-xs text-gray-500 mt-1">Pro Plan</p>
-          </div>
-          <img 
-            src="https://picsum.photos/seed/photographer/100/100" 
-            alt="User Avatar" 
-            className="w-9 h-9 rounded-full object-cover border border-gray-200"
-            referrerPolicy="no-referrer"
-          />
-        </button>
+        <div className="relative">
+          <button 
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)} 
+            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+          >
+            <div className="hidden sm:block text-right">
+              <p className="text-sm font-semibold text-gray-900 leading-none">{auth.currentUser?.displayName || 'Alex Studio'}</p>
+              <p className="text-xs text-gray-500 mt-1">Pro Plan</p>
+            </div>
+            <img 
+              src="https://picsum.photos/seed/photographer/100/100" 
+              alt="User Avatar" 
+              className="w-9 h-9 rounded-full object-cover border border-gray-200"
+              referrerPolicy="no-referrer"
+            />
+          </button>
+
+          {isDropdownOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
+              <button 
+                onClick={onLogout} 
+                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+              >
+                <LogOut className="w-4 h-4" /> Logout
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
@@ -445,6 +503,149 @@ const StatCard = ({ title, value, trend, icon: Icon, trendUp }: any) => (
 );
 
 const DashboardContent = () => {
+  const [revenue, setRevenue] = useState(0);
+  const [totalClients, setTotalClients] = useState(0);
+  const [pendingDeliveries, setPendingDeliveries] = useState(0);
+  const [upcomingShoots, setUpcomingShoots] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const timeAgo = (dateValue: any) => {
+    if (!dateValue) return 'Unknown';
+    // Handle Firestore Timestamp or ISO string
+    const date = dateValue.toDate ? dateValue.toDate() : new Date(dateValue);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + ' years ago';
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + ' months ago';
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + ' days ago';
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + ' hours ago';
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + ' minutes ago';
+    return 'Just now';
+  };
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (!auth.currentUser) return;
+      setLoading(true);
+      try {
+        const uid = auth.currentUser.uid;
+        
+        // Fetch Bookings
+        const bookingsQ = query(collection(db, 'bookings'), where('userId', '==', uid));
+        const bookingsSnap = await getDocs(bookingsQ);
+        
+        let totalRev = 0;
+        const uniqueClients = new Set();
+        const allBookings: any[] = [];
+        
+        bookingsSnap.forEach(doc => {
+          const data = doc.data();
+          allBookings.push({ id: doc.id, ...data });
+          
+          totalRev += parseFloat(data.totalAmount) || 0;
+          if (data.phone || data.fullName) {
+            uniqueClients.add(data.phone || data.fullName);
+          }
+        });
+        
+        setRevenue(totalRev);
+        
+        // Fetch Clients
+        const clientsQ = query(collection(db, 'clients'), where('userId', '==', uid));
+        const clientsSnap = await getDocs(clientsQ);
+        clientsSnap.forEach(doc => {
+          const data = doc.data();
+          if (data.phone || data.fullName) {
+            uniqueClients.add(data.phone || data.fullName);
+          }
+        });
+        
+        setTotalClients(uniqueClients.size);
+        
+        // Upcoming Shoots
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const upcoming = allBookings
+          .filter(b => b.eventDate && new Date(b.eventDate) >= today)
+          .sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
+          .slice(0, 3);
+          
+        setUpcomingShoots(upcoming);
+        
+        // Recent Activity
+        try {
+          const recentQ = query(
+            collection(db, 'bookings'),
+            where('userId', '==', uid),
+            orderBy('createdAt', 'desc'),
+            limit(3)
+          );
+          const recentSnap = await getDocs(recentQ);
+          const recentData: any[] = [];
+          recentSnap.forEach(doc => recentData.push({ id: doc.id, ...doc.data() }));
+          setRecentActivity(recentData);
+        } catch (indexError) {
+          console.warn("Falling back to in-memory sort for recent activity due to missing index.", indexError);
+          const sorted = [...allBookings]
+            .filter(b => b.createdAt)
+            .sort((a, b) => {
+              const timeA = a.createdAt.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime();
+              const timeB = b.createdAt.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime();
+              return timeB - timeA;
+            })
+            .slice(0, 3);
+          setRecentActivity(sorted);
+        }
+        
+        // Pending Deliveries
+        const galleriesQ = query(collection(db, 'galleries'), where('userId', '==', uid));
+        const galleriesSnap = await getDocs(galleriesQ);
+        let pendingCount = 0;
+        galleriesSnap.forEach(doc => {
+          const status = doc.data().status;
+          if (status === 'Pending Selection' || status === 'Processing') {
+            pendingCount++;
+          }
+        });
+        setPendingDeliveries(pendingCount);
+        
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchDashboardData();
+  }, []);
+
+  if (loading) {
+    return (
+      <main className="flex-1 overflow-y-auto bg-[#FAFAFA] p-4 sm:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto space-y-8 animate-pulse">
+          <div className="bg-gray-200 rounded-3xl h-64 w-full"></div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 h-32"></div>
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 h-32"></div>
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 h-32"></div>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 h-96"></div>
+            <div className="bg-white rounded-2xl border border-gray-100 h-96"></div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex-1 overflow-y-auto bg-[#FAFAFA] p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -454,10 +655,10 @@ const DashboardContent = () => {
           <div className="absolute top-0 right-0 w-64 h-64 bg-red-600 rounded-full blur-3xl opacity-20 -translate-y-1/2 translate-x-1/3"></div>
           <div className="relative z-10 max-w-2xl">
             <h1 className="text-3xl sm:text-4xl font-bold mb-4 tracking-tight">
-              Welcome back, Alex.
+              Welcome back, {auth.currentUser?.displayName || 'Alex'}.
             </h1>
             <p className="text-gray-400 text-lg mb-8 max-w-xl">
-              You have 3 upcoming shoots this weekend and 2 pending gallery deliveries. Let's make some magic happen.
+              You have {upcomingShoots.length} upcoming shoots and {pendingDeliveries} pending gallery deliveries. Let's make some magic happen.
             </p>
             <div className="flex flex-wrap gap-4">
               <button className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-medium transition-colors flex items-center gap-2">
@@ -474,21 +675,21 @@ const DashboardContent = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <StatCard 
             title="Total Clients" 
-            value="1,248" 
+            value={totalClients.toLocaleString()} 
             trend="12.5" 
             icon={Users} 
             trendUp={true} 
           />
           <StatCard 
             title="Pending Deliveries" 
-            value="14" 
+            value={pendingDeliveries.toString()} 
             trend="4.2" 
             icon={ImageIcon} 
             trendUp={false} 
           />
           <StatCard 
-            title="Monthly Revenue" 
-            value="$24,500" 
+            title="Revenue" 
+            value={`৳${revenue.toLocaleString()}`} 
             trend="8.1" 
             icon={DollarSign} 
             trendUp={true} 
@@ -502,28 +703,56 @@ const DashboardContent = () => {
               <h2 className="text-lg font-bold text-gray-900">Upcoming Shoots</h2>
               <button className="text-sm text-red-600 font-medium hover:text-red-700">View All</button>
             </div>
-            <div className="flex flex-col items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-100 rounded-xl">
-              <Calendar className="w-8 h-8 mb-3 text-gray-300" />
-              <p>No upcoming shoots this week.</p>
-            </div>
+            {upcomingShoots.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-gray-400 border-2 border-dashed border-gray-100 rounded-xl">
+                <Calendar className="w-8 h-8 mb-3 text-gray-300" />
+                <p>No upcoming shoots scheduled.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {upcomingShoots.map(shoot => (
+                  <div key={shoot.id} className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center shrink-0 text-red-600 font-bold">
+                        {new Date(shoot.eventDate).getDate()}
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900">{shoot.fullName}</p>
+                        <p className="text-sm text-gray-500">{shoot.eventType} • {shoot.venue || 'TBD'}</p>
+                      </div>
+                    </div>
+                    <div className="text-right hidden sm:block">
+                      <p className="text-sm font-medium text-gray-900">{new Date(shoot.eventDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</p>
+                      <p className="text-xs text-gray-500">Upcoming</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 min-h-[400px]">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold text-gray-900">Recent Activity</h2>
             </div>
-            <div className="space-y-6">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex gap-4">
-                  <div className="w-2 h-2 mt-2 rounded-full bg-red-600 shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Contract Signed</p>
-                    <p className="text-sm text-gray-500 mt-0.5">Sarah & John Wedding</p>
-                    <p className="text-xs text-gray-400 mt-1">2 hours ago</p>
+            {recentActivity.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                <p>No recent activity.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {recentActivity.map((activity) => (
+                  <div key={activity.id} className="flex gap-4">
+                    <div className="w-2 h-2 mt-2 rounded-full bg-red-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">New Booking Added</p>
+                      <p className="text-sm text-gray-500 mt-0.5">{activity.fullName} • {activity.eventType}</p>
+                      <p className="text-xs text-gray-400 mt-1">{timeAgo(activity.createdAt)}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -789,7 +1018,288 @@ const SettingsContent = () => {
   );
 };
 
+const LeadsContent = () => {
+  const [leads, setLeads] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    clientName: '',
+    phone: '',
+    desiredEvent: '',
+    estimatedBudget: ''
+  });
+
+  const COLUMNS = ['New Inquiry', 'Following Up', 'Negotiating', 'Lost'];
+
+  const fetchLeads = async () => {
+    if (!auth.currentUser) return;
+    setLoading(true);
+    try {
+      const q = query(collection(db, 'leads'), where('userId', '==', auth.currentUser.uid));
+      const snap = await getDocs(q);
+      const leadsData: any[] = [];
+      snap.forEach(doc => leadsData.push({ id: doc.id, ...doc.data() }));
+      
+      // Sort in memory to avoid index requirement
+      leadsData.sort((a, b) => {
+        const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
+        const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
+        return timeB - timeA; // desc
+      });
+      
+      setLeads(leadsData);
+    } catch (error) {
+      console.error("Error fetching leads:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLeads();
+  }, []);
+
+  const handleStatusChange = async (leadId: string, newStatus: string) => {
+    try {
+      // Optimistic update
+      setLeads(leads.map(l => l.id === leadId ? { ...l, status: newStatus } : l));
+      await updateDoc(doc(db, 'leads', leadId), { status: newStatus });
+    } catch (error) {
+      console.error("Error updating status:", error);
+      // Revert on error
+      fetchLeads();
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser) return;
+    setSaving(true);
+    try {
+      const newLead = {
+        ...formData,
+        status: 'New Inquiry',
+        userId: auth.currentUser.uid,
+        createdAt: serverTimestamp()
+      };
+      await addDoc(collection(db, 'leads'), newLead);
+      setFormData({ clientName: '', phone: '', desiredEvent: '', estimatedBudget: '' });
+      setIsModalOpen(false);
+      fetchLeads();
+    } catch (error) {
+      console.error("Error adding lead:", error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleConvertToBooking = async (lead: any) => {
+    if (!auth.currentUser) return;
+    try {
+      // Step A: Create client
+      const newClient = {
+        fullName: lead.clientName || '',
+        phone: lead.phone || '',
+        email: '',
+        address: '',
+        userId: auth.currentUser.uid,
+        createdAt: serverTimestamp()
+      };
+      await addDoc(collection(db, 'clients'), newClient);
+
+      // Step B: Create booking
+      const newBooking = {
+        fullName: lead.clientName || '',
+        phone: lead.phone || '',
+        eventType: lead.desiredEvent || '',
+        totalAmount: lead.estimatedBudget || 0,
+        advancePaid: 0,
+        dueAmount: lead.estimatedBudget || 0,
+        status: 'Pending',
+        userId: auth.currentUser.uid,
+        createdAt: serverTimestamp()
+      };
+      await addDoc(collection(db, 'bookings'), newBooking);
+
+      // Step C: Delete lead
+      await deleteDoc(doc(db, 'leads', lead.id));
+
+      // Update local state
+      setLeads(leads.filter(l => l.id !== lead.id));
+
+      alert('Successfully converted to Client and Booking!');
+    } catch (error) {
+      console.error("Error converting lead to booking:", error);
+      alert('Failed to convert lead. Please try again.');
+    }
+  };
+
+  return (
+    <main className="flex-1 overflow-y-auto bg-[#FAFAFA] p-4 sm:p-6 lg:p-8 flex flex-col">
+      <div className="max-w-[1600px] mx-auto w-full flex-1 flex flex-col space-y-6">
+        
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Leads & Pipeline</h1>
+            <p className="text-gray-500 mt-1">Track and manage your incoming inquiries.</p>
+          </div>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" /> New Lead
+          </button>
+        </div>
+
+        {/* Kanban Board */}
+        {loading ? (
+          <div className="flex items-center justify-center flex-1">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-x-auto pb-4">
+            <div className="flex gap-6 h-full min-h-[500px]">
+              {COLUMNS.map(column => {
+                const columnLeads = leads.filter(l => l.status === column);
+                return (
+                  <div key={column} className="min-w-[320px] w-[320px] shrink-0 bg-gray-100/50 rounded-2xl p-4 flex flex-col">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold text-gray-900">{column}</h3>
+                      <span className="bg-white text-gray-500 text-xs font-bold px-2 py-1 rounded-full shadow-sm">
+                        {columnLeads.length}
+                      </span>
+                    </div>
+                    
+                    <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+                      {columnLeads.map(lead => (
+                        <div key={lead.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                          <h4 className="font-bold text-gray-900">{lead.clientName}</h4>
+                          <p className="text-sm text-gray-500 mt-1">{lead.phone}</p>
+                          
+                          <div className="mt-3 flex items-center gap-2 text-xs font-medium">
+                            <span className="bg-red-50 text-red-600 px-2 py-1 rounded-md">{lead.desiredEvent}</span>
+                            {lead.estimatedBudget && (
+                              <span className="bg-gray-50 text-gray-600 px-2 py-1 rounded-md">৳{lead.estimatedBudget}</span>
+                            )}
+                          </div>
+                          
+                          <div className="mt-4 pt-4 border-t border-gray-50 space-y-3">
+                            <select 
+                              value={lead.status}
+                              onChange={(e) => handleStatusChange(lead.id, e.target.value)}
+                              className="w-full text-sm border-gray-200 rounded-lg focus:ring-red-500 focus:border-red-500 bg-gray-50"
+                            >
+                              {COLUMNS.map(col => (
+                                <option key={col} value={col}>{col}</option>
+                              ))}
+                            </select>
+                            
+                            <button 
+                              onClick={() => handleConvertToBooking(lead)}
+                              className="w-full bg-black hover:bg-gray-800 text-white text-sm py-2 rounded-lg font-medium transition-colors"
+                            >
+                              Convert to Booking
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {columnLeads.length === 0 && (
+                        <div className="h-24 border-2 border-dashed border-gray-200 rounded-xl flex items-center justify-center text-gray-400 text-sm">
+                          No leads
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* New Lead Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900">Add New Lead</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+                <input 
+                  type="text" 
+                  required
+                  value={formData.clientName}
+                  onChange={(e) => setFormData({...formData, clientName: e.target.value})}
+                  className="w-full border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500"
+                  placeholder="John Doe"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                <input 
+                  type="tel" 
+                  required
+                  value={formData.phone}
+                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  className="w-full border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500"
+                  placeholder="+880 1..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Desired Event</label>
+                <input 
+                  type="text" 
+                  required
+                  value={formData.desiredEvent}
+                  onChange={(e) => setFormData({...formData, desiredEvent: e.target.value})}
+                  className="w-full border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500"
+                  placeholder="e.g., Holud, Wedding"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Budget (BDT)</label>
+                <input 
+                  type="number" 
+                  value={formData.estimatedBudget}
+                  onChange={(e) => setFormData({...formData, estimatedBudget: e.target.value})}
+                  className="w-full border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500"
+                  placeholder="50000"
+                />
+              </div>
+              <div className="pt-4 flex gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors disabled:opacity-70"
+                >
+                  {saving ? 'Saving...' : 'Save Lead'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+};
+
 const BookingsContent = () => {
+  const { settings } = React.useContext(BrandContext);
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
@@ -806,6 +1316,7 @@ const BookingsContent = () => {
   const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
 
   const fetchBookings = async () => {
     if (!auth.currentUser) return;
@@ -839,6 +1350,35 @@ const BookingsContent = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleEdit = (booking: any) => {
+    setFormData({
+      fullName: booking.fullName || '',
+      phone: booking.phone || '',
+      email: booking.email || '',
+      address: booking.address || '',
+      eventDate: booking.eventDate || '',
+      venue: booking.venue || '',
+      eventType: booking.eventType || 'Holud',
+      package: booking.package || 'Combo',
+      totalAmount: booking.totalAmount || '',
+      advancePaid: booking.advancePaid || ''
+    });
+    setEditingBookingId(booking.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (bookingId: string) => {
+    if (window.confirm("Are you sure you want to delete this booking? This action cannot be undone.")) {
+      try {
+        await deleteDoc(doc(db, "bookings", bookingId));
+        setRecentBookings(recentBookings.filter(b => b.id !== bookingId));
+      } catch (error) {
+        console.error("Error deleting booking:", error);
+        alert("Failed to delete booking.");
+      }
+    }
+  };
+
   const total = parseFloat(formData.totalAmount) || 0;
   const advance = parseFloat(formData.advancePaid) || 0;
   const dueAmount = Math.max(0, total - advance);
@@ -849,15 +1389,23 @@ const BookingsContent = () => {
 
     setSaving(true);
     try {
-      const newBooking = {
-        ...formData,
-        dueAmount,
-        status: dueAmount <= 0 ? 'Delivered' : 'Pending',
-        userId: auth.currentUser.uid,
-        createdAt: new Date().toISOString()
-      };
-
-      await addDoc(collection(db, 'bookings'), newBooking);
+      if (editingBookingId) {
+        const updatedBooking = {
+          ...formData,
+          dueAmount,
+          status: dueAmount <= 0 ? 'Delivered' : 'Pending',
+        };
+        await updateDoc(doc(db, 'bookings', editingBookingId), updatedBooking);
+      } else {
+        const newBooking = {
+          ...formData,
+          dueAmount,
+          status: dueAmount <= 0 ? 'Delivered' : 'Pending',
+          userId: auth.currentUser.uid,
+          createdAt: new Date().toISOString()
+        };
+        await addDoc(collection(db, 'bookings'), newBooking);
+      }
       
       // Reset form
       setFormData({
@@ -872,10 +1420,11 @@ const BookingsContent = () => {
         totalAmount: '',
         advancePaid: ''
       });
+      setEditingBookingId(null);
       
       // Refresh list
       fetchBookings();
-      alert('Booking saved successfully!');
+      alert(editingBookingId ? 'Booking updated successfully!' : 'Booking saved successfully!');
     } catch (error) {
       console.error("Error saving booking: ", error);
       alert('Failed to save booking. Please try again.');
@@ -899,7 +1448,7 @@ const BookingsContent = () => {
           <div className="p-6 border-b border-gray-100 bg-gray-50/50">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-red-600" />
-              New Booking Form
+              {editingBookingId ? 'Edit Booking' : 'New Booking Form'}
             </h2>
           </div>
           
@@ -970,7 +1519,7 @@ const BookingsContent = () => {
                     <label className="text-sm font-medium text-gray-700">Venue Name</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Map className="h-4 w-4 text-gray-400" />
+                        <MapIcon className="h-4 w-4 text-gray-400" />
                       </div>
                       <input type="text" name="venue" value={formData.venue} onChange={handleInputChange} className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400 text-sm" placeholder="Venue" />
                     </div>
@@ -1040,10 +1589,33 @@ const BookingsContent = () => {
               </div>
             </div>
 
-            <div className="mt-8 flex justify-end border-t border-gray-100 pt-6">
-              <button type="submit" disabled={saving} className="bg-red-600 hover:bg-red-700 text-white px-8 py-2.5 rounded-xl font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-70">
+            <div className="mt-8 flex justify-end gap-3 border-t border-gray-100 pt-6">
+              {editingBookingId && (
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setFormData({
+                      fullName: '',
+                      phone: '',
+                      email: '',
+                      address: '',
+                      eventDate: '',
+                      venue: '',
+                      eventType: 'Holud',
+                      package: 'Combo',
+                      totalAmount: '',
+                      advancePaid: ''
+                    });
+                    setEditingBookingId(null);
+                  }}
+                  className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+              <button type="submit" disabled={saving} className="text-white px-8 py-2.5 rounded-xl font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-70 hover:opacity-90" style={{ backgroundColor: settings.brandColor }}>
                 <CheckCircle className="w-4 h-4" />
-                {saving ? 'Saving...' : 'Save Booking'}
+                {saving ? 'Saving...' : (editingBookingId ? 'Save Changes' : 'Save Booking')}
               </button>
             </div>
           </form>
@@ -1074,6 +1646,7 @@ const BookingsContent = () => {
                     <th className="px-6 py-4 font-semibold">Event Type</th>
                     <th className="px-6 py-4 font-semibold">Due Amount</th>
                     <th className="px-6 py-4 font-semibold">Status</th>
+                    <th className="px-6 py-4 font-semibold text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1105,6 +1678,26 @@ const BookingsContent = () => {
                           {booking.status}
                         </span>
                       </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black"
+                            onClick={() => handleEdit(booking)}
+                            title="Edit Booking"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            <span className="hidden sm:inline">Edit</span>
+                          </button>
+                          <button 
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700"
+                            onClick={() => handleDelete(booking.id)}
+                            title="Delete Booking"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span className="hidden sm:inline">Delete</span>
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1119,10 +1712,12 @@ const BookingsContent = () => {
 };
 
 const MagicGalleryContent = () => {
-  const [selectedClient, setSelectedClient] = useState('');
+  const { settings } = React.useContext(BrandContext);
+  const [selectedBookingId, setSelectedBookingId] = useState('');
   const [folderLink, setFolderLink] = useState('');
 
   const [galleries, setGalleries] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -1150,18 +1745,41 @@ const MagicGalleryContent = () => {
     }
   };
 
+  const fetchBookings = async () => {
+    if (!auth.currentUser) return;
+    try {
+      const q = query(
+        collection(db, 'bookings'),
+        where('userId', '==', auth.currentUser.uid)
+      );
+      const querySnapshot = await getDocs(q);
+      const bookingsData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setBookings(bookingsData);
+    } catch (error) {
+      console.error("Error fetching bookings: ", error);
+    }
+  };
+
   useEffect(() => {
     fetchGalleries();
+    fetchBookings();
   }, []);
 
   const handleGenerateLink = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClient || !folderLink || !auth.currentUser) return;
+    if (!selectedBookingId || !folderLink || !auth.currentUser) return;
     
     setSaving(true);
     try {
+      const selectedBooking = bookings.find(b => b.id === selectedBookingId);
+      const clientName = selectedBooking ? selectedBooking.fullName : 'Unknown Client';
+
       const newGallery = {
-        clientName: selectedClient,
+        bookingId: selectedBookingId,
+        clientName: clientName,
         folderLink: folderLink,
         dateCreated: new Date().toISOString().split('T')[0],
         status: 'Pending Selection',
@@ -1173,7 +1791,7 @@ const MagicGalleryContent = () => {
       
       await addDoc(collection(db, 'galleries'), newGallery);
       
-      setSelectedClient('');
+      setSelectedBookingId('');
       setFolderLink('');
       fetchGalleries();
       alert('Client Selection Link Generated Successfully!');
@@ -1226,16 +1844,17 @@ const MagicGalleryContent = () => {
                     <User className="h-4 w-4 text-gray-400" />
                   </div>
                   <select 
-                    value={selectedClient} 
-                    onChange={(e) => setSelectedClient(e.target.value)} 
+                    value={selectedBookingId} 
+                    onChange={(e) => setSelectedBookingId(e.target.value)} 
                     required 
                     className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black text-sm appearance-none bg-white"
                   >
                     <option value="" disabled>Select a client booking...</option>
-                    <option value="Rahim & Masuma Wedding">Rahim & Masuma Wedding</option>
-                    <option value="Aisha & Fahim Holud">Aisha & Fahim Holud</option>
-                    <option value="Nadia & Kamal Engagement">Nadia & Kamal Engagement</option>
-                    <option value="Zara & Ali Akdh">Zara & Ali Akdh</option>
+                    {bookings.map(booking => (
+                      <option key={booking.id} value={booking.id}>
+                        {booking.fullName} - {booking.eventType}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1259,7 +1878,7 @@ const MagicGalleryContent = () => {
             </div>
 
             <div className="mt-6 flex justify-end">
-              <button type="submit" disabled={saving} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded-xl font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-70">
+              <button type="submit" disabled={saving} className="text-white px-6 py-2.5 rounded-xl font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-70 hover:opacity-90" style={{ backgroundColor: settings.brandColor }}>
                 <Link className="w-4 h-4" />
                 {saving ? 'Generating...' : 'Generate Client Selection Link'}
               </button>
@@ -1352,10 +1971,25 @@ const MagicGalleryContent = () => {
 };
 
 const CalendarContent = () => {
+  const { settings } = React.useContext(BrandContext);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [bookings, setBookings] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    fullName: '',
+    phone: '',
+    email: '',
+    address: '',
+    eventDate: '',
+    venue: '',
+    eventType: 'Holud',
+    package: 'Combo',
+    totalAmount: '',
+    advancePaid: ''
+  });
 
   const fetchBookings = async () => {
     if (!auth.currentUser) return;
@@ -1414,6 +2048,114 @@ const CalendarContent = () => {
 
   const selectedDateBookings = selectedDate ? getBookingsForDate(selectedDate) : [];
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const total = parseFloat(formData.totalAmount) || 0;
+  const advance = parseFloat(formData.advancePaid) || 0;
+  const dueAmount = Math.max(0, total - advance);
+
+  const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
+
+  const handleOpenModal = () => {
+    if (!selectedDate) return;
+    const y = selectedDate.getFullYear();
+    const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const d = String(selectedDate.getDate()).padStart(2, '0');
+    const formattedDate = `${y}-${m}-${d}`;
+
+    setFormData({
+      fullName: '',
+      phone: '',
+      email: '',
+      address: '',
+      eventDate: formattedDate,
+      venue: '',
+      eventType: 'Holud',
+      package: 'Combo',
+      totalAmount: '',
+      advancePaid: ''
+    });
+    setEditingBookingId(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEdit = (booking: any) => {
+    setFormData({
+      fullName: booking.fullName || '',
+      phone: booking.phone || '',
+      email: booking.email || '',
+      address: booking.address || '',
+      eventDate: booking.eventDate || '',
+      venue: booking.venue || '',
+      eventType: booking.eventType || 'Holud',
+      package: booking.package || 'Combo',
+      totalAmount: booking.totalAmount?.toString() || '',
+      advancePaid: booking.advancePaid?.toString() || ''
+    });
+    setEditingBookingId(booking.id);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this booking? This action cannot be undone.")) {
+      try {
+        await deleteDoc(doc(db, 'bookings', id));
+        setBookings(bookings.filter(b => b.id !== id));
+      } catch (error) {
+        console.error("Error deleting booking: ", error);
+        alert("Failed to delete booking.");
+      }
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser) return;
+
+    setSaving(true);
+    try {
+      const bookingData = {
+        ...formData,
+        dueAmount,
+        status: dueAmount <= 0 ? 'Delivered' : 'Pending',
+        userId: auth.currentUser.uid,
+        updatedAt: serverTimestamp()
+      };
+
+      if (editingBookingId) {
+        await updateDoc(doc(db, 'bookings', editingBookingId), bookingData);
+        setBookings(bookings.map(b => b.id === editingBookingId ? { ...b, ...bookingData } : b));
+      } else {
+        const newBooking = {
+          ...bookingData,
+          createdAt: new Date().toISOString()
+        };
+        const bookingRef = await addDoc(collection(db, 'bookings'), newBooking);
+
+        const newClient = {
+          fullName: formData.fullName,
+          phone: formData.phone,
+          email: formData.email,
+          address: formData.address,
+          userId: auth.currentUser.uid,
+          createdAt: serverTimestamp()
+        };
+        await addDoc(collection(db, 'clients'), newClient);
+
+        setBookings([...bookings, { id: bookingRef.id, ...newBooking }]);
+      }
+      setIsModalOpen(false);
+      setEditingBookingId(null);
+    } catch (error) {
+      console.error("Error saving booking: ", error);
+      alert('Failed to save booking. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <main className="flex-1 overflow-y-auto bg-[#F9FAFB] p-4 sm:p-6 lg:p-8">
       <div className="max-w-6xl mx-auto space-y-8">
@@ -1461,14 +2203,15 @@ const CalendarContent = () => {
                     key={date.toISOString()}
                     onClick={() => setSelectedDate(date)}
                     className={`aspect-square flex flex-col items-center justify-center rounded-xl relative transition-all ${
-                      isSelected ? 'bg-black text-white shadow-md' : 
-                      isToday ? 'bg-red-50 text-red-600 font-bold' : 
+                      isSelected ? 'text-white shadow-md' : 
+                      isToday ? 'bg-red-50 font-bold' : 
                       'hover:bg-gray-50 text-gray-700'
                     }`}
+                    style={isSelected ? { backgroundColor: settings.brandColor } : (isToday ? { color: settings.brandColor } : {})}
                   >
                     <span className="text-sm">{date.getDate()}</span>
                     {hasBooking && (
-                      <div className={`w-1.5 h-1.5 rounded-full absolute bottom-2 ${isSelected ? 'bg-red-500' : 'bg-red-600'}`} />
+                      <div className={`w-1.5 h-1.5 rounded-full absolute bottom-2 ${isSelected ? 'bg-white/80' : ''}`} style={!isSelected ? { backgroundColor: settings.brandColor } : {}} />
                     )}
                   </button>
                 );
@@ -1485,28 +2228,770 @@ const CalendarContent = () => {
               
               {!selectedDate ? (
                 <p className="text-gray-500 text-sm">Click on a date in the calendar to view bookings.</p>
-              ) : selectedDateBookings.length === 0 ? (
-                <p className="text-gray-500 text-sm">No bookings on this date.</p>
               ) : (
-                <div className="space-y-4">
-                  {selectedDateBookings.map(booking => (
-                    <div key={booking.id} className="p-4 rounded-xl border border-gray-100 bg-gray-50">
-                      <div className="font-bold text-gray-900">{booking.fullName}</div>
-                      <div className="text-sm text-red-600 font-medium mt-1">{booking.eventType}</div>
-                      {booking.venue && (
-                        <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-2">
-                          <MapPin className="w-3.5 h-3.5" />
-                          {booking.venue}
+                <>
+                  {selectedDateBookings.length === 0 ? (
+                    <p className="text-gray-500 text-sm mb-6">No bookings on this date.</p>
+                  ) : (
+                    <div className="space-y-4 mb-6">
+                      {selectedDateBookings.map(booking => (
+                        <div key={booking.id} className="p-4 rounded-xl border border-gray-100 bg-gray-50 relative group">
+                          <div className="font-bold text-gray-900">{booking.fullName}</div>
+                          <div className="text-sm text-red-600 font-medium mt-1">{booking.eventType}</div>
+                          {booking.venue && (
+                            <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-2">
+                              <MapPin className="w-3.5 h-3.5" />
+                              {booking.venue}
+                            </div>
+                          )}
+                          <div className="absolute top-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit(booking);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-colors shadow-sm border border-transparent hover:border-gray-200"
+                              title="Edit Booking"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(booking.id);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-white rounded-lg transition-colors shadow-sm border border-transparent hover:border-gray-200"
+                              title="Delete Booking"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )}
+                  <button 
+                    onClick={handleOpenModal}
+                    className="w-full text-white px-4 py-2.5 rounded-xl font-medium transition-colors shadow-sm flex items-center justify-center gap-2 hover:opacity-90"
+                    style={{ backgroundColor: settings.brandColor }}
+                  >
+                    <Plus className="w-5 h-5" />
+                    Add Booking for {selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </button>
+                </>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* New Booking Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl my-8">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-gray-50/50 rounded-t-2xl">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-red-600" />
+                {editingBookingId ? 'Edit Booking' : 'New Booking'}
+              </h3>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Client Info */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider border-b border-gray-100 pb-2">Client Information</h3>
+                  
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Full Name</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <User className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <input type="text" name="fullName" value={formData.fullName} onChange={handleInputChange} required className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400 text-sm" placeholder="Client Name" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Phone Number</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Phone className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} required className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400 text-sm" placeholder="+880 1..." />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Email Address</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Mail className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <input type="email" name="email" value={formData.email} onChange={handleInputChange} className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400 text-sm" placeholder="email@example.com" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Address</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <MapPin className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <input type="text" name="address" value={formData.address} onChange={handleInputChange} className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400 text-sm" placeholder="Full Address" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Event Info */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider border-b border-gray-100 pb-2">Event Details</h3>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-gray-700">Event Date</label>
+                      <input type="date" name="eventDate" value={formData.eventDate} onChange={handleInputChange} required className="block w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black text-sm" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-gray-700">Event Type</label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Tag className="h-4 w-4 text-gray-400" />
+                        </div>
+                        <select name="eventType" value={formData.eventType} onChange={handleInputChange} className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black text-sm appearance-none bg-white">
+                          <option value="Holud">Holud</option>
+                          <option value="Reception">Reception</option>
+                          <option value="Engagement">Engagement</option>
+                          <option value="Akdh">Akdh</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Venue Name</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <MapIcon className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <input type="text" name="venue" value={formData.venue} onChange={handleInputChange} className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400 text-sm" placeholder="Venue" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700">Package Selected</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Package className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <select name="package" value={formData.package} onChange={handleInputChange} className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black text-sm appearance-none bg-white">
+                        <option value="Standard Photography">Standard Photography</option>
+                        <option value="Premium Cinematography">Premium Cinematography</option>
+                        <option value="Combo">Combo</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-gray-700">Total Amount</label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <span className="text-gray-500 font-medium text-sm">৳</span>
+                        </div>
+                        <input type="number" name="totalAmount" value={formData.totalAmount} onChange={handleInputChange} required className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400 text-sm" placeholder="0" />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-gray-700">Advance Paid</label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <span className="text-gray-500 font-medium text-sm">৳</span>
+                        </div>
+                        <input type="number" name="advancePaid" value={formData.advancePaid} onChange={handleInputChange} className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400 text-sm" placeholder="0" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex justify-end gap-3 border-t border-gray-100 pt-6">
+                <button 
+                  type="button" 
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button type="submit" disabled={saving} className="text-white px-8 py-2.5 rounded-xl font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-70 hover:opacity-90" style={{ backgroundColor: settings.brandColor }}>
+                  <CheckCircle className="w-4 h-4" />
+                  {saving ? 'Saving...' : (editingBookingId ? 'Update Booking' : 'Save Booking')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+};
+
+const ClientsContent = () => {
+  const [clients, setClients] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    fullName: '',
+    phone: '',
+    email: '',
+    address: ''
+  });
+
+  const fetchClients = async () => {
+    if (!auth.currentUser) return;
+    setLoading(true);
+    try {
+      const clientsMap = new Map();
+
+      // Fetch from bookings
+      const bookingsQ = query(
+        collection(db, 'bookings'),
+        where('userId', '==', auth.currentUser.uid)
+      );
+      const bookingsSnap = await getDocs(bookingsQ);
+      bookingsSnap.forEach(doc => {
+        const data = doc.data();
+        const key = data.phone || data.fullName;
+        if (key) {
+          if (!clientsMap.has(key)) {
+            clientsMap.set(key, {
+              id: `booking-${doc.id}`,
+              fullName: data.fullName,
+              phone: data.phone,
+              email: data.email || '',
+              totalBookings: 1
+            });
+          } else {
+            clientsMap.get(key).totalBookings += 1;
+          }
+        }
+      });
+
+      // Fetch from explicit clients collection
+      const clientsQ = query(
+        collection(db, 'clients'),
+        where('userId', '==', auth.currentUser.uid)
+      );
+      const clientsSnap = await getDocs(clientsQ);
+      clientsSnap.forEach(doc => {
+        const data = doc.data();
+        const key = data.phone || data.fullName;
+        if (key) {
+          if (!clientsMap.has(key)) {
+            clientsMap.set(key, {
+              id: doc.id,
+              fullName: data.fullName,
+              phone: data.phone,
+              email: data.email || '',
+              totalBookings: 0
+            });
+          }
+        }
+      });
+
+      setClients(Array.from(clientsMap.values()));
+    } catch (error) {
+      console.error("Error fetching clients: ", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClients();
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleEdit = (client: any) => {
+    setFormData({
+      fullName: client.fullName || '',
+      phone: client.phone || '',
+      email: client.email || '',
+      address: client.address || ''
+    });
+    setEditingClientId(client.id);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (clientId: string) => {
+    if (clientId.startsWith('booking-')) {
+      alert('This client is derived from a booking and cannot be deleted directly. Please delete the associated booking.');
+      return;
+    }
+    
+    if (window.confirm("Are you sure you want to delete this client?")) {
+      try {
+        await deleteDoc(doc(db, "clients", clientId));
+        setClients(clients.filter(c => c.id !== clientId));
+      } catch (error) {
+        console.error("Error deleting client:", error);
+        alert("Failed to delete client.");
+      }
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth.currentUser) return;
+
+    setSaving(true);
+    try {
+      if (editingClientId) {
+        if (editingClientId.startsWith('booking-')) {
+          const newClient = {
+            ...formData,
+            userId: auth.currentUser.uid,
+            createdAt: serverTimestamp()
+          };
+          await addDoc(collection(db, 'clients'), newClient);
+        } else {
+          await updateDoc(doc(db, 'clients', editingClientId), formData);
+        }
+      } else {
+        const newClient = {
+          ...formData,
+          userId: auth.currentUser.uid,
+          createdAt: serverTimestamp()
+        };
+        await addDoc(collection(db, 'clients'), newClient);
+      }
+      
+      setFormData({
+        fullName: '',
+        phone: '',
+        email: '',
+        address: ''
+      });
+      setIsModalOpen(false);
+      setEditingClientId(null);
+      fetchClients();
+    } catch (error) {
+      console.error("Error saving client: ", error);
+      alert('Failed to save client. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filteredClients = clients.filter(c => 
+    c.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.phone?.includes(searchQuery)
+  );
+
+  return (
+    <main className="flex-1 overflow-y-auto bg-[#F9FAFB] p-4 sm:p-6 lg:p-8">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
+            <p className="text-gray-500 mt-1">Manage your client database and history.</p>
+          </div>
+          <button 
+            onClick={() => {
+              setFormData({ fullName: '', phone: '', email: '', address: '' });
+              setEditingClientId(null);
+              setIsModalOpen(true);
+            }}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-medium transition-colors shadow-sm flex items-center gap-2 shrink-0"
+          >
+            <Plus className="w-5 h-5" />
+            Add New Client
+          </button>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+            <div className="relative max-w-md">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black placeholder-gray-400 text-sm"
+                placeholder="Search clients by name or phone..."
+              />
+            </div>
+          </div>
+          
+          <div className="overflow-x-auto">
+            {loading ? (
+              <div className="p-8 text-center text-gray-500">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
+                Loading clients...
+              </div>
+            ) : filteredClients.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                No clients found.
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-white border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
+                    <th className="px-6 py-4 font-semibold">Client Name</th>
+                    <th className="px-6 py-4 font-semibold">Phone</th>
+                    <th className="px-6 py-4 font-semibold">Total Bookings</th>
+                    <th className="px-6 py-4 font-semibold text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredClients.map((client) => (
+                    <tr key={client.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-gray-900">{client.fullName}</div>
+                        {client.email && <div className="text-xs text-gray-500 mt-0.5">{client.email}</div>}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600 text-sm">
+                        {client.phone || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                          {client.totalBookings} Bookings
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black"
+                            onClick={() => handleEdit(client)}
+                            title="Edit Client"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            <span className="hidden sm:inline">Edit</span>
+                          </button>
+                          <button 
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700"
+                            onClick={() => handleDelete(client.id)}
+                            title="Delete Client"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span className="hidden sm:inline">Delete</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Add/Edit Client Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">{editingClientId ? 'Edit Client' : 'Add New Client'}</h3>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700">Full Name</label>
+                <input type="text" name="fullName" value={formData.fullName} onChange={handleInputChange} required className="block w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black text-sm" placeholder="Client Name" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700">Phone Number</label>
+                <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} required className="block w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black text-sm" placeholder="+880 1..." />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700">Email Address</label>
+                <input type="email" name="email" value={formData.email} onChange={handleInputChange} className="block w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black text-sm" placeholder="email@example.com" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700">Address</label>
+                <input type="text" name="address" value={formData.address} onChange={handleInputChange} className="block w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all outline-none text-black text-sm" placeholder="Full Address" />
+              </div>
+              <div className="pt-4 flex justify-end gap-3">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-xl transition-colors">Cancel</button>
+                <button type="submit" disabled={saving} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-xl font-medium transition-colors shadow-sm disabled:opacity-70">
+                  {saving ? 'Saving...' : (editingClientId ? 'Save Changes' : 'Save Client')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+};
+
+const InvoicesContent = () => {
+  const { settings } = React.useContext(BrandContext);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+
+  const fetchInvoices = async () => {
+    if (!auth.currentUser) return;
+    setLoading(true);
+    try {
+      const q = query(
+        collection(db, 'bookings'),
+        where('userId', '==', auth.currentUser.uid)
+      );
+      const querySnapshot = await getDocs(q);
+      const invoicesData = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        const total = parseFloat(data.totalAmount) || 0;
+        const advance = parseFloat(data.advancePaid) || 0;
+        const due = Math.max(0, total - advance);
+        
+        let status = 'Unpaid';
+        if (total > 0 && due === 0) status = 'Paid';
+        else if (advance > 0 && due > 0) status = 'Partially Paid';
+        else if (total > 0 && advance === 0) status = 'Unpaid';
+
+        return {
+          id: doc.id,
+          ...data,
+          totalAmountNum: total,
+          advancePaidNum: advance,
+          dueAmountNum: due,
+          paymentStatus: status
+        };
+      });
+      
+      // Sort by creation date descending
+      invoicesData.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setInvoices(invoicesData);
+    } catch (error) {
+      console.error("Error fetching invoices: ", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInvoices();
+  }, []);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <main className="flex-1 overflow-y-auto bg-[#F9FAFB] p-4 sm:p-6 lg:p-8">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Billing Dashboard</h1>
+          <p className="text-gray-500 mt-1">Manage payments, track dues, and generate invoices.</p>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <CreditCard className="w-5 h-5" style={{ color: settings.brandColor }} />
+              Recent Invoices
+            </h2>
+          </div>
+          
+          <div className="overflow-x-auto">
+            {loading ? (
+              <div className="p-8 text-center text-gray-500">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 mx-auto mb-4" style={{ borderColor: settings.brandColor }}></div>
+                Loading invoices...
+              </div>
+            ) : invoices.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                No billing records found.
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-white border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
+                    <th className="px-6 py-4 font-semibold">Client Name</th>
+                    <th className="px-6 py-4 font-semibold">Total Amount</th>
+                    <th className="px-6 py-4 font-semibold">Advance Paid</th>
+                    <th className="px-6 py-4 font-semibold">Due Amount</th>
+                    <th className="px-6 py-4 font-semibold">Status</th>
+                    <th className="px-6 py-4 font-semibold text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {invoices.map((invoice) => (
+                    <tr key={invoice.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-gray-900">{invoice.fullName}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">{invoice.eventType}</div>
+                      </td>
+                      <td className="px-6 py-4 text-gray-900 font-medium">
+                        ${invoice.totalAmountNum.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">
+                        ${invoice.advancePaidNum.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 font-bold" style={{ color: settings.brandColor }}>
+                        ${invoice.dueAmountNum.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                          invoice.paymentStatus === 'Paid' 
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                            : invoice.paymentStatus === 'Partially Paid'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : 'bg-red-50 text-red-700 border border-red-200'
+                        }`}>
+                          {invoice.paymentStatus}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button 
+                          onClick={() => setSelectedInvoice(invoice)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors hover:opacity-80"
+                          style={{ backgroundColor: `${settings.brandColor}15`, color: settings.brandColor }}
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span className="hidden sm:inline">Generate Invoice</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Printable Invoice Modal */}
+      {selectedInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-auto relative">
+            {/* Modal Actions (Not printed) */}
+            <div className="flex items-center justify-end gap-3 p-4 border-b border-gray-100 print:hidden bg-gray-50 rounded-t-2xl">
+              <button 
+                onClick={handlePrint}
+                className="bg-black hover:bg-gray-800 text-white px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-2 text-sm"
+              >
+                <Printer className="w-4 h-4" />
+                Print Invoice
+              </button>
+              <button 
+                onClick={() => setSelectedInvoice(null)}
+                className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-2 text-sm"
+              >
+                <X className="w-4 h-4" />
+                Close
+              </button>
+            </div>
+
+            {/* Printable Area */}
+            <div className="p-8 sm:p-12 print:p-0 print:m-0 bg-white print:w-full print:h-full">
+              <div className="flex justify-between items-start mb-12">
+                <div>
+                  {settings.logoUrl ? (
+                    <img src={settings.logoUrl} alt={settings.agencyName} className="h-10 mb-2 object-contain" />
+                  ) : (
+                    <div className="flex items-center gap-2 font-bold text-2xl tracking-tight mb-2">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center print:-webkit-print-color-adjust-exact" style={{ backgroundColor: settings.brandColor }}>
+                        <Camera className="w-5 h-5 text-white" />
+                      </div>
+                      <span>{settings.agencyName === 'LensCRM' ? <>Lens<span style={{ color: settings.brandColor }}>CRM</span></> : settings.agencyName}</span>
+                    </div>
+                  )}
+                  <p className="text-gray-500 text-sm">Premium Wedding Cinematography</p>
+                </div>
+                <div className="text-right">
+                  <h2 className="text-3xl font-bold text-gray-900 uppercase tracking-wider mb-2">Invoice</h2>
+                  <p className="text-gray-500 font-medium">INV-{selectedInvoice.id.substring(0, 6).toUpperCase()}</p>
+                  <p className="text-gray-500 text-sm mt-1">
+                    Date: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-8 mb-12">
+                <div>
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Billed To</h3>
+                  <p className="text-lg font-bold text-gray-900">{selectedInvoice.fullName}</p>
+                  <p className="text-gray-600 mt-1">{selectedInvoice.phone}</p>
+                  {selectedInvoice.email && <p className="text-gray-600">{selectedInvoice.email}</p>}
+                  {selectedInvoice.address && <p className="text-gray-600 mt-1">{selectedInvoice.address}</p>}
+                </div>
+                <div className="text-right">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Event Details</h3>
+                  <p className="text-gray-900 font-medium">{selectedInvoice.eventType} - {selectedInvoice.package} Package</p>
+                  <p className="text-gray-600 mt-1">Date: {new Date(selectedInvoice.eventDate).toLocaleDateString()}</p>
+                  {selectedInvoice.venue && <p className="text-gray-600 mt-1">Venue: {selectedInvoice.venue}</p>}
+                </div>
+              </div>
+
+              <table className="w-full mb-12">
+                <thead>
+                  <tr className="border-b-2 border-black text-left">
+                    <th className="py-3 font-bold text-gray-900 uppercase tracking-wider text-sm">Description</th>
+                    <th className="py-3 font-bold text-gray-900 uppercase tracking-wider text-sm text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  <tr>
+                    <td className="py-4 text-gray-900">
+                      <div className="font-medium">{selectedInvoice.package} Photography & Cinematography Package</div>
+                      <div className="text-sm text-gray-500 mt-1">Coverage for {selectedInvoice.eventType}</div>
+                    </td>
+                    <td className="py-4 text-gray-900 font-medium text-right">
+                      ${selectedInvoice.totalAmountNum.toLocaleString()}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div className="flex justify-end">
+                <div className="w-full max-w-sm space-y-3">
+                  <div className="flex justify-between text-gray-600">
+                    <span>Total Amount:</span>
+                    <span className="font-medium text-gray-900">${selectedInvoice.totalAmountNum.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>Advance Paid:</span>
+                    <span className="font-medium text-gray-900">${selectedInvoice.advancePaidNum.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-xl font-bold text-gray-900 pt-3 border-t border-gray-200">
+                    <span>Amount Due:</span>
+                    <span style={{ color: settings.brandColor }}>${selectedInvoice.dueAmountNum.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-16 pt-8 border-t border-gray-200 text-center">
+                <p className="text-gray-500 font-medium">Thank you for your business!</p>
+                <p className="text-gray-400 text-sm mt-1">If you have any questions about this invoice, please contact us.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 };
@@ -1553,10 +3038,13 @@ function MainDashboard() {
         <Topbar toggleSidebar={toggleSidebar} onLogout={handleLogout} />
         {activeTab === 'Dashboard' && <DashboardContent />}
         {activeTab === 'Calendar' && <CalendarContent />}
+        {activeTab === 'Leads' && <LeadsContent />}
         {activeTab === 'Bookings' && <BookingsContent />}
+        {activeTab === 'Clients' && <ClientsContent />}
+        {activeTab === 'Invoices' && <InvoicesContent />}
         {activeTab === 'Magic Gallery' && <MagicGalleryContent />}
         {activeTab === 'Settings' && <SettingsContent />}
-        {activeTab !== 'Dashboard' && activeTab !== 'Calendar' && activeTab !== 'Bookings' && activeTab !== 'Settings' && activeTab !== 'Magic Gallery' && (
+        {activeTab !== 'Dashboard' && activeTab !== 'Calendar' && activeTab !== 'Leads' && activeTab !== 'Bookings' && activeTab !== 'Clients' && activeTab !== 'Invoices' && activeTab !== 'Settings' && activeTab !== 'Magic Gallery' && (
           <main className="flex-1 overflow-y-auto bg-[#FAFAFA] p-4 sm:p-6 lg:p-8 flex items-center justify-center">
             <div className="text-gray-400 flex flex-col items-center">
               <p className="text-xl font-medium">{activeTab} Content</p>
@@ -1570,6 +3058,7 @@ function MainDashboard() {
 }
 
 const PublicGallery = () => {
+  const { settings, setSettings } = React.useContext(BrandContext);
   const { galleryId } = useParams();
   const [gallery, setGallery] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -1596,6 +3085,19 @@ const PublicGallery = () => {
           if (data.selectedIds) {
             setSelectedIds(new Set(data.selectedIds));
           }
+          
+          if (data.userId) {
+            const settingsRef = doc(db, 'settings', data.userId);
+            const settingsSnap = await getDoc(settingsRef);
+            if (settingsSnap.exists()) {
+              const sData = settingsSnap.data();
+              setSettings({
+                brandColor: sData.brandColor || '#dc2626',
+                logoUrl: sData.logoUrl || '',
+                agencyName: sData.agencyName || 'LensCRM'
+              });
+            }
+          }
         } else {
           setError('Gallery not found.');
         }
@@ -1608,7 +3110,7 @@ const PublicGallery = () => {
     };
 
     fetchGallery();
-  }, [galleryId]);
+  }, [galleryId, setSettings]);
 
   const toggleSelection = (id: string) => {
     const newSelection = new Set(selectedIds);
@@ -1663,7 +3165,17 @@ const PublicGallery = () => {
   return (
     <div className="min-h-screen bg-[#FAFAFA] pb-24">
       {/* Premium Header */}
-      <header className="bg-black text-white py-8 px-4 sm:px-6 lg:px-8 text-center sticky top-0 z-10 shadow-md">
+      <header className="bg-black text-white py-8 px-4 sm:px-6 lg:px-8 text-center sticky top-0 z-10 shadow-md flex flex-col items-center">
+        {settings.logoUrl ? (
+          <img src={settings.logoUrl} alt={settings.agencyName} className="h-12 mb-4 object-contain" />
+        ) : (
+          <div className="flex items-center gap-2 font-bold text-2xl tracking-tight mb-4">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: settings.brandColor }}>
+              <Camera className="w-6 h-6 text-white" />
+            </div>
+            <span>{settings.agencyName === 'LensCRM' ? <>Lens<span style={{ color: settings.brandColor }}>CRM</span></> : settings.agencyName}</span>
+          </div>
+        )}
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Welcome, {gallery.clientName}!</h1>
         <p className="text-gray-400 mt-2 text-sm sm:text-base">Please select your favorites.</p>
         {gallery.status === 'Selected' && (
@@ -1691,8 +3203,9 @@ const PublicGallery = () => {
                 key={photo.id} 
                 onClick={() => gallery.status !== 'Selected' && toggleSelection(photo.id)}
                 className={`relative aspect-[4/3] rounded-xl overflow-hidden cursor-pointer group transition-all duration-200 ${
-                  isSelected ? 'ring-4 ring-red-600 ring-offset-2' : 'hover:ring-2 hover:ring-gray-300 hover:ring-offset-2'
+                  isSelected ? 'ring-4 ring-offset-2' : 'hover:ring-2 hover:ring-gray-300 hover:ring-offset-2'
                 } ${gallery.status === 'Selected' ? 'cursor-default opacity-80' : ''}`}
+                style={isSelected ? { '--tw-ring-color': settings.brandColor } as React.CSSProperties : {}}
               >
                 <img 
                   src={photo.url} 
@@ -1706,9 +3219,9 @@ const PublicGallery = () => {
                   <div className="absolute top-3 right-3">
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors ${
                       isSelected 
-                        ? 'bg-red-600 border-red-600 text-white' 
+                        ? 'border-transparent text-white' 
                         : 'bg-black/40 border-white text-transparent'
-                    }`}>
+                    }`} style={isSelected ? { backgroundColor: settings.brandColor } : {}}>
                       <CheckCircle className="w-4 h-4" />
                     </div>
                   </div>
@@ -1724,7 +3237,7 @@ const PublicGallery = () => {
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] p-4 z-20">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="bg-red-50 text-red-600 font-bold px-4 py-2 rounded-xl">
+              <div className="font-bold px-4 py-2 rounded-xl" style={{ backgroundColor: `${settings.brandColor}15`, color: settings.brandColor }}>
                 {selectedIds.size}
               </div>
               <span className="text-gray-600 font-medium hidden sm:inline">Photos Selected</span>
@@ -1733,7 +3246,8 @@ const PublicGallery = () => {
             <button 
               onClick={handleSubmitSelection}
               disabled={selectedIds.size === 0 || submitting}
-              className="bg-red-600 hover:bg-red-700 text-white px-6 sm:px-8 py-3 rounded-xl font-bold transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="text-white px-6 sm:px-8 py-3 rounded-xl font-bold transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+              style={{ backgroundColor: settings.brandColor }}
             >
               {submitting ? (
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -1750,12 +3264,42 @@ const PublicGallery = () => {
 };
 
 export default function App() {
+  const [settings, setSettings] = useState<BrandSettings>(defaultBrandSettings);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const docRef = doc(db, 'settings', user.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setSettings({
+              brandColor: data.brandColor || '#dc2626',
+              logoUrl: data.logoUrl || '',
+              agencyName: data.agencyName || 'LensCRM'
+            });
+          } else {
+            setSettings(defaultBrandSettings);
+          }
+        } catch (error) {
+          console.error("Error fetching settings:", error);
+        }
+      } else {
+        setSettings(defaultBrandSettings);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<MainDashboard />} />
-        <Route path="/gallery/:galleryId" element={<PublicGallery />} />
-      </Routes>
-    </BrowserRouter>
+    <BrandContext.Provider value={{ settings, setSettings }}>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<MainDashboard />} />
+          <Route path="/gallery/:galleryId" element={<PublicGallery />} />
+        </Routes>
+      </BrowserRouter>
+    </BrandContext.Provider>
   );
 }
